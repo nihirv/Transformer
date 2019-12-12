@@ -45,15 +45,37 @@ class Embeddings(nn.Module):
         
 
 # %%
-toy_embeddings = Embeddings(toy_vocab.shape[-1]+1, D_MODEL==4)
-toy_embeddings(toy_vocab)
+toy_embedding_layer = Embeddings(toy_vocab.shape[-1]+1, d_model=4)
+toy_embeddings = toy_embedding_layer(toy_vocab)
+print(toy_embeddings)
 
 # %%
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model=D_MODEL, p_drop=P_DROP):
+    def __init__(self, d_model=D_MODEL, p_drop=P_DROP, max_len=5000):
         super().__init__()
-        # sel
-    
+        self.pe = torch.zeros(max_len, d_model)
+        pos = torch.arange(0, max_len).unsqueeze(1).float()
+
+        two_i = torch.arange(0, max_len, step=2)
+        div_term = torch.pow(10000, (two_i/d_model)).float()
+        print(torch.sin(pos/div_term).shape)
+        self.pe[:, 0::2] = torch.sin(pos/div_term)
+        self.pe[:, 1::2] = torch.cos(pos/div_term)
+
+        self.pe = self.pe.unsqueeze(0)
+        self.register_buffer("pe", self.pe)
+
+        self.dropout = nn.Dropout(P_DROP)
+    # x is the input embedding
+    def forward(self, x):
+        x = x + self.pe[:, :x.size(1)].detach()
+        return self.dropout(x)
+
+# %%
+toy_PE_layer = PositionalEncoding(d_model=4)
+toy_PEs = toy_PE_layer(toy_embeddings)
+print(toy_PEs)
+
 # %%
 class MultiHeadAttention():
     def __init__(self):
