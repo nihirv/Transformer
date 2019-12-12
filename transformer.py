@@ -45,7 +45,7 @@ class Embeddings(nn.Module):
         
 
 # %%
-toy_embedding_layer = Embeddings(toy_vocab.shape[-1]+1, d_model=4)
+toy_embedding_layer = Embeddings(toy_vocab.shape[-1]+1)
 toy_embeddings = toy_embedding_layer(toy_vocab)
 print(toy_embeddings)
 
@@ -63,16 +63,19 @@ class PositionalEncoding(nn.Module):
         self.pe[:, 1::2] = torch.cos(pos/div_term)
 
         self.pe = self.pe.unsqueeze(0)
-        self.register_buffer("pe", self.pe)
+        self.register_buffer("pex", self.pe)
 
         self.dropout = nn.Dropout(P_DROP)
+        
     # x is the input embedding
     def forward(self, x):
+
+        # work through this line :S
         x = x + self.pe[:, :x.size(1)].detach()
         return self.dropout(x)
 
 # %%
-toy_PE_layer = PositionalEncoding(d_model=4)
+toy_PE_layer = PositionalEncoding()
 toy_PEs = toy_PE_layer(toy_embeddings)
 print(toy_PEs)
 
