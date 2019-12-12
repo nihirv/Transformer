@@ -56,9 +56,9 @@ class PositionalEncoding(nn.Module):
         self.pe = torch.zeros(max_len, d_model)
         pos = torch.arange(0, max_len).unsqueeze(1).float()
 
-        two_i = torch.arange(0, max_len, step=2)
+        two_i = torch.arange(0, d_model, step=2)
         div_term = torch.pow(10000, (two_i/d_model)).float()
-        print(torch.sin(pos/div_term).shape)
+        print(div_term.shape)        
         self.pe[:, 0::2] = torch.sin(pos/div_term)
         self.pe[:, 1::2] = torch.cos(pos/div_term)
 
