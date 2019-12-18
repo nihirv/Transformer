@@ -487,10 +487,13 @@ for step in tqdm(range(STEPS)):
     
     predictions, _, _ = transformer(t_src, t_trg_inp)
 
-    print("predictions shape:", predictions.shape)
+    t_trg_real_OH = F.one_hot(t_trg_real, num_classes=trg_vocab_len)
 
-    loss = criterion(predictions.reshape(-1, predictions.shape[-1]), t_trg_real.reshape(-1))/num_targ_tokens_in_batch
-    print(loss.shape)
+    print("predictions shape:", predictions.shape)
+    print("OH shape:", t_trg_real_OH.shape)
+
+    loss = criterion(predictions, t_trg_real_OH)/num_targ_tokens_in_batch
+    # loss = criterion(predictions.reshape(-1, predictions.shape[-1]), t_trg_real.reshape(-1))/num_targ_tokens_in_batch
     loss.backward()
 
     optimizer.step()
@@ -498,7 +501,7 @@ for step in tqdm(range(STEPS)):
     loss_list.append(loss)
 
     if step % 50 == 0:
-        print("Loss at {}th step: {}".format(step, loss))
+        print("Loss at {}th step: {}".format(step, loss.item()))
         max_args = predictions[0].argmax(-1)
         print("Real targets for first element in batch:", t_trg_real[0, :])
         print("Predicted targets for first element in batch:", max_args)
