@@ -489,7 +489,8 @@ for step in tqdm(range(STEPS)):
 
     print("predictions shape:", predictions.shape)
 
-    loss = criterion(predictions.view(-1, predictions.size(-1)), t_trg_real.view(-1))/num_targ_tokens_in_batch
+    loss = criterion(predictions.reshape(-1, predictions.shape[-1]), t_trg_real.reshape(-1))/num_targ_tokens_in_batch
+    print(loss.shape)
     loss.backward()
 
     optimizer.step()
