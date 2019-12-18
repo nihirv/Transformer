@@ -487,12 +487,13 @@ for step in tqdm(range(STEPS)):
     
     predictions, _, _ = transformer(t_src, t_trg_inp)
 
-    loss = criterion(predictions.permute(0, 2, 1), t_trg_real)/num_targ_tokens_in_batch
+    loss = criterion(predictions.permute(0, 2, 1), t_trg_real)
     loss.mean().backward()
 
     optimizer.step()
 
     loss_list.append(loss)
+    print()
 
     if step % 50 == 0:
         print("Loss at {}th step: {}".format(step, loss.mean().item()))
@@ -500,3 +501,6 @@ for step in tqdm(range(STEPS)):
         print("Real targets for first element in batch:", t_trg_real[0, :])
         print("Predicted targets for first element in batch:", max_args)
 
+
+
+# %%
