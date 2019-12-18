@@ -3,9 +3,11 @@ import torch
 from torchtext.datasets import Multi30k
 from torchtext.data import Field, BucketIterator
 from torch import nn, Tensor
+from torch.optim import Adam
 import torch.nn.functional as F
 import math
 from torchsummary import summary
+from tqdm import tqdm
 
 # %%
 SRC = Field(tokenize="spacy", tokenizer_language="de",
@@ -24,19 +26,25 @@ TRG.build_vocab(train_data, min_freq=2)
 device = "cpu"
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 
 train_iter, val_iter, test_iter = BucketIterator.splits(
     (train_data, val_data, test_data),
     batch_size=BATCH_SIZE,
-    device=device
+    device=device,
+    repeat=True,
+    shuffle=True
 )
 
+
 # %%
+x_ = next(iter(train_iter))
 toy_vocab = torch.Tensor([[1, 2, 3]]).long()  # [a,b,c]
 # %%
 D_MODEL = 512
 P_DROP = 0.1
+NUM_HEADS = 8
+D_FF = 2048
 # %%
 
 
@@ -53,7 +61,7 @@ class Embeddings(nn.Module):
 # %%
 toy_embedding_layer = Embeddings(toy_vocab.shape[-1]+1, d_model=4)
 toy_embeddings = toy_embedding_layer(toy_vocab)
-print(toy_embeddings)
+print(toy_embeddings, toy_embeddings.shape)
 
 # %%
 
@@ -94,7 +102,7 @@ print(toy_PEs)
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model=D_MODEL, num_heads=8, mask=None, p_drop=P_DROP):
+    def __init__(self, d_model=D_MODEL, num_heads=NUM_HEADS, p_drop=P_DROP):
         super().__init__()
 
         # d_q, d_k, d_v
@@ -102,43 +110,105 @@ class MultiHeadAttention(nn.Module):
 
         self.d_model = d_model
         self.num_heads = num_heads
-        self.mask = mask
 
         self.dropout = nn.Dropout(P_DROP)
 
-    def scaled_dot_product_attention(self, Q: Tensor, K: Tensor, V: Tensor):
+        self.linear_Qs = [nn.Linear(d_model, self.d)] * num_heads
+        self.linear_Ks = [nn.Linear(d_model, self.d)] * num_heads
+        self.linear_Vs = [nn.Linear(d_model, self.d)] * num_heads
+
+        self.mha_linear = nn.Linear(d_model, d_model)
+
+    def scaled_dot_product_attention(self, Q: Tensor, K: Tensor, V: Tensor, mask=None):
         Q_K_matmul = torch.matmul(Q, K.transpose(-2, -1))
         matmul_scaled = Q_K_matmul/math.sqrt(self.d)
 
-        if self.mask is None:
-            scaled_softmax = F.softmax(matmul_scaled, dim=-1)
+        if mask is not None:
+            matmul_scaled += (mask * '-inf')
 
-        dropout_scaled_softmax = self.dropout(scaled_softmax)
-        return torch.matmul(dropout_scaled_softmax, V)
+        attention_weights = F.softmax(matmul_scaled, dim=-1)
+        # print("WHAT's THE MASK", mask)
+        # print("SCALED SOFTMAX", attention_weights)
 
-    def forward(self, x: Tensor, queries: Tensor = None, keys: Tensor = None, values: Tensor = None):
+        output = torch.matmul(attention_weights, V)
+
+        return output, attention_weights
+
+    def forward(self, x: Tensor, queries: Tensor = None, keys: Tensor = None, values: Tensor = None, mask=None):
+
         q = x if not queries else queries
-        k = x if not keys else keys
-        v = x if not values else values
+        if keys is not None:
+            k = keys
+        else:
+            k = x
 
-        Q = [nn.Linear(x.size(-1), self.d)(q)
-             for head in range(self.num_heads)]
-        K = [nn.Linear(x.size(-1), self.d)(k)
-             for head in range(self.num_heads)]
-        V = [nn.Linear(x.size(-1), self.d)(v)
-             for head in range(self.num_heads)]
+        if values is not None:
+            v = values
+        else:
+            v = x
 
-        scores_per_head = [self.scaled_dot_product_attention(
-            Q_, K_, V_) for Q_, K_, V_ in zip(Q, K, V)]
+        # These will all be a list of Tensors
+        Q = [linear(q) for linear in self.linear_Qs]
+        K = [linear(k) for linear in self.linear_Ks]
+        V = [linear(v) for linear in self.linear_Vs]
+
+        # Why doesn't this work as expected?
+        # scores_per_head, attention_weights = [self.scaled_dot_product_attention(
+        #     Q_, K_, V_, mask) for (Q_, K_, V_) in zip(Q, K, V)]
+
+        scores_per_head = []
+        attention_weights_per_head = []
+        for Q_, K_, V_ in zip(Q, K, V):
+            score, attention_weight = self.scaled_dot_product_attention(
+                Q_, K_, V_)
+            scores_per_head.append(score)
+            attention_weights_per_head.append(attention_weight)
 
         concat_scores = torch.cat(scores_per_head, -1)
-        return nn.Linear(concat_scores.size(-1), self.d_model)(concat_scores)
+
+        # shape: [B x num_head x S x S]
+        attn_stacked = torch.stack(
+            attention_weights_per_head, -1).permute(0, 3, 1, 2)
+
+        return self.dropout(self.mha_linear(concat_scores)), attn_stacked
 
 
 # %%
 toy_MHA_layer = MultiHeadAttention(d_model=4, num_heads=2)
-toy_MHA = toy_MHA_layer(toy_PEs)
+toy_MHA, attention_weights = toy_MHA_layer(toy_PEs)
 print(toy_MHA, toy_MHA.shape)
+
+
+# %%
+temp_MHA_layer = MultiHeadAttention(d_model=3, num_heads=1)
+
+
+def print_out(q, k, v):
+    temp_out, temp_attn = temp_MHA_layer.scaled_dot_product_attention(
+        q, k, v, None)
+    print('Attention weights are:')
+    print(temp_attn)
+    print('Output is:')
+    print(temp_out)
+
+
+temp_k = torch.Tensor([[10, 0, 0],
+                       [0, 10, 0],
+                       [0, 0, 10],
+                       [0, 0, 10]])
+
+temp_v = torch.Tensor([[1, 0],
+                       [10, 0],
+                       [100, 5],
+                       [1000, 6]])
+
+temp_q = torch.Tensor([[0, 0, 10], [0, 10, 0], [10, 10, 0]])
+
+print_out(temp_q, temp_k, temp_v)
+
+# temp_y = torch.rand((1, 60, 512))
+
+
 # %%
 
 
@@ -162,7 +232,7 @@ print(toy_AddNorm, toy_AddNorm.shape)
 
 
 class PointwiseFeedforward(nn.Module):
-    def __init__(self, d_model=D_MODEL, d_ff=2048, p_drop=P_DROP):
+    def __init__(self, d_model=D_MODEL, d_ff=D_FF, p_drop=P_DROP):
         super().__init__()
         self.pffn = nn.Sequential(
             nn.Linear(d_model, d_ff),
@@ -188,7 +258,7 @@ print(toy_AddNorm_2, toy_AddNorm_2.shape)
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model=D_MODEL, num_heads=8, d_ff=2048, p_drop=P_DROP):
+    def __init__(self, d_model=D_MODEL, num_heads=NUM_HEADS, d_ff=D_FF, p_drop=P_DROP):
         super().__init__()
 
         self.d_model = d_model
@@ -197,18 +267,21 @@ class EncoderLayer(nn.Module):
         self.p_drop = p_drop
 
     def forward(self, x):
-        mha = MultiHeadAttention(self.d_model, self.num_heads, p_drop=self.p_drop)(x)
+        mha, _ = MultiHeadAttention(
+            self.d_model, self.num_heads, self.p_drop)(x)
         addNorm_1 = AddNorm(self.d_model, self.p_drop)(mha, x)
+
         pffn = PointwiseFeedforward(
             self.d_model, self.d_ff, self.p_drop)(addNorm_1)
         addNorm_2 = AddNorm(self.d_model, self.p_drop)(pffn, addNorm_1)
+
         return addNorm_2
 
 # %%
 
 
 class Encoder(nn.Module):
-    def __init__(self, num_layers, len_vocab, d_model, num_heads, d_ff, p_drop):
+    def __init__(self, num_layers, len_vocab, d_model, num_heads, d_ff, p_drop, Embedding: Embeddings):
         super().__init__()
 
         self.len_vocab = len_vocab
@@ -216,6 +289,8 @@ class Encoder(nn.Module):
         self.num_heads = num_heads
         self.d_ff = d_ff
         self.p_drop = p_drop
+
+        self.Embedding = Embedding
 
         self.encoders = nn.ModuleList([EncoderLayer(
             self.d_model,
@@ -226,26 +301,204 @@ class Encoder(nn.Module):
         self.encodersModelStack = nn.Sequential(*self.encoders)
 
     def forward(self, x):
-        embeddings = Embeddings(self.len_vocab, self.d_model)(x)
+        embeddings = self.Embedding(x)
+
         positional_encoding = PositionalEncoding(
             self.d_model, self.p_drop)(embeddings)
         return self.encodersModelStack(positional_encoding)
 
 
 # %%
-toy_encoder = Encoder(3, 4, 4, 2, 16, 0.1)
+toy_encoder = Encoder(3, 4, 4, 2, 16, 0.1, toy_embedding_layer)
 toy_encoder_output = toy_encoder(toy_vocab)
 print(toy_encoder_output, toy_encoder_output.shape)
+
 
 # %%
 
 
-class DecoderLayer():
-    def __init__(self):
-        pass
+class DecoderLayer(nn.Module):
+    def __init__(self, d_model=D_MODEL, num_heads=NUM_HEADS, d_ff=D_FF, p_drop=P_DROP):
+        super().__init__()
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_ff = d_ff
+        self.p_drop = p_drop
+
+        # These are both of type List<Tensors>.
+        # They store the attention weights per layer
+        # So if we had N decoder layers in our Decoder,
+        # the final DecoderLayer will hold N attention weight tensors
+        self.masked_mha_attn_weights = []
+        self.enc_dec_mha_attn_weights = []
+
+    def forward(self, inputs):
+        x, encoder_output, mask, masked_mha_attn_weights, enc_dec_mha_attn_weights = inputs
+        # add masking capabilities
+        masked_mha, masked_mha_attn_weights = MultiHeadAttention(
+            self.d_model, self.num_heads, self.p_drop)(x, mask=mask)
+        addNorm_1 = AddNorm(self.d_model, self.p_drop)(masked_mha, x)
+
+        mha, enc_dec_mha_attn_weights = MultiHeadAttention(
+            self.d_model, self.num_heads, self.p_drop)(x, None, encoder_output, encoder_output)
+        addNorm_2 = AddNorm(self.d_model, self.p_drop)(mha, addNorm_1)
+
+        pffn = PointwiseFeedforward(
+            self.d_model, self.d_ff, self.p_drop)(addNorm_2)
+        addNorm_3 = AddNorm(self.d_model, self.p_drop)(pffn, addNorm_2)
+
+        self.masked_mha_attn_weights.append(masked_mha_attn_weights)
+        self.enc_dec_mha_attn_weights.append(enc_dec_mha_attn_weights)
+
+        return (addNorm_3, encoder_output, mask, self.masked_mha_attn_weights, self.enc_dec_mha_attn_weights)
+
+
+# %%
+class Decoder(nn.Module):
+    def __init__(self, num_layers, len_vocab, d_model, num_heads, d_ff, p_drop, Embedding: Embeddings):
+        super().__init__()
+
+        self.len_vocab = len_vocab
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_ff = d_ff
+        self.p_drop = p_drop
+
+        self.Embedding = Embedding
+
+        self.decoders = nn.ModuleList([DecoderLayer(
+            self.d_model,
+            self.num_heads,
+            self.d_ff,
+            self.p_drop
+        )] * num_layers)
+
+        self.decodersModelStack = nn.Sequential(*self.decoders)
+
+    def create_mask(self, seq_len):
+        ones_arr = torch.ones((seq_len, seq_len))
+        mask = ones_arr.triu(1)
+        return mask
+
+    def forward(self, x, encoder_output):
+        embeddings = self.Embedding(x)
+
+        mask = self.create_mask(x.shape[1])
+
+        positional_encoding = PositionalEncoding(
+            self.d_model, self.p_drop)(embeddings)
+
+        return self.decodersModelStack((positional_encoding, encoder_output, mask, None, None))
+
+
+# %%
+toy_decoder = Decoder(3, 4, 4, 2, 16, 0.1, toy_embedding_layer)
+toy_decoder_output, _, _, toy_mmha_w, toy_e_d_mha_w = toy_decoder(
+    toy_vocab, toy_encoder_output)
+print(toy_decoder_output, toy_decoder_output.shape)
+print(toy_mmha_w, len(toy_mmha_w))
+print(toy_e_d_mha_w, len(toy_e_d_mha_w))
+
 # %%
 
 
 class Transformer(nn.Module):
-    def __init__(self):
-        pass
+    def __init__(self, num_layers, src_vocab_len, trg_vocab_len, d_model, num_heads, d_ff, p_drop):
+        super().__init__()
+
+        len_vocab = src_vocab_len + trg_vocab_len
+
+        Embedding = Embeddings(len_vocab, d_model)
+
+        self.encoder = Encoder(num_layers, src_vocab_len,
+                               d_model, num_heads, d_ff, p_drop, Embedding)
+        self.decoder = Decoder(num_layers, trg_vocab_len,
+                               d_model, num_heads, d_ff, p_drop, Embedding)
+
+        # Maybe use target vocab size here
+        self.linear_layer = nn.Linear(d_model, trg_vocab_len)
+
+    def forward(self, input, target):
+        encoder_outputs = self.encoder(input)
+        decoder_output, _, _, masked_mha_attn_weights, enc_dec_mha_attn_weights = self.decoder(
+            target, encoder_outputs)
+
+        return (self.linear_layer(decoder_output), masked_mha_attn_weights, enc_dec_mha_attn_weights)
+
+
+# %%
+toy_transformer_layer = Transformer(
+    2, 8000, 8500, 512, 8, 2048, 0.1
+)
+
+toy_input = torch.rand((64, 38)).long()
+toy_target = torch.rand((64, 36)).long()
+toy_output, _, _ = toy_transformer_layer(toy_input, toy_target)
+print(toy_output.shape, toy_output)
+
+
+# %%
+def custom_lr_optimizer(optimizer: Adam, step, d_model=D_MODEL, warmup_steps=4000):
+    min_arg1 = math.sqrt(1/(step+1))
+    min_arg2 = step * (warmup_steps**-1.5)
+    lr = math.sqrt(1/d_model) * min(min_arg1, min_arg2)
+
+    optimizer.param_groups[0]["lr"] = lr
+
+    return optimizer
+
+
+# %%
+def init_weights(model: nn.Module):
+    for param in model.parameters():
+        if param.dim() > 1:
+            nn.init.xavier_uniform_(param)
+
+# %%
+PAD_IDX = TRG.vocab.stoi["<pad>"]
+src_vocab_len = SRC.vocab.__len__()
+trg_vocab_len = TRG.vocab.__len__()
+transformer = Transformer(2, src_vocab_len, trg_vocab_len, D_MODEL, NUM_HEADS, D_FF, P_DROP)
+
+# %%
+criterion = nn.CrossEntropyLoss(reduction="none", ignore_index=PAD_IDX)
+optimizer = Adam(transformer.parameters(), betas=(0.9, 0.98))
+
+# %%
+STEPS = 100000
+EPOCHS = STEPS // len(train_iter)
+loss_list = []
+
+for step in tqdm(range(STEPS)):
+    optimizer = custom_lr_optimizer(optimizer, step)
+    optimizer.zero_grad()
+    
+    # Get current batch from train_iter.
+    # Since we're shuffling with repeat, we just need
+    # to call next(iter(.)) at every step
+    t = next(iter(train_iter))
+    t_src, t_trg = t.src.T, t.trg.T
+
+    t_trg_inp = t_trg[:, :-1]
+    t_trg_real = t_trg[:, 1:]
+
+    num_targ_tokens_in_batch = (t_trg_real != PAD_IDX).data.sum()
+    
+    predictions, _, _ = transformer(t_src, t_trg_inp)
+
+    print("predictions shape:", predictions.shape)
+
+    loss = criterion(predictions.view(-1, predictions.size(-1)), t_trg_real.view(-1))/num_targ_tokens_in_batch
+    loss.backward()
+
+    optimizer.step()
+
+    loss_list.append(loss)
+
+    if step % 50 == 0:
+        print("Loss at {}th step: {}".format(step, loss))
+        max_args = predictions[0].argmax(-1)
+        print("Real targets for first element in batch:", t_trg_real[0, :])
+        print("Predicted targets for first element in batch:", max_args)
+
