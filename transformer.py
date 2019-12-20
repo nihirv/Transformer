@@ -23,8 +23,10 @@ SRC.build_vocab(train_data, min_freq=2)
 TRG.build_vocab(train_data, min_freq=2)
 
 # %%
-device = "cpu"
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = "cpu"
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if device == "cuda":
+    torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 BATCH_SIZE = 64
 
@@ -89,14 +91,14 @@ class PositionalEncoding(nn.Module):
     def forward(self, x):
 
         # work through this line :S
-        x = x + self.pe[:, :x.size(1)].detach()
+        x = x + self.pe[:, :x.size(1)].to(device)
         return self.dropout(x)
 
 
 # %%
-toy_PE_layer = PositionalEncoding(d_model=4)
-toy_PEs = toy_PE_layer(toy_embeddings)
-print(toy_PEs)
+# toy_PE_layer = PositionalEncoding(d_model=4)
+# toy_PEs = toy_PE_layer(toy_embeddings)
+# print(toy_PEs)
 
 # %%
 
@@ -113,11 +115,11 @@ class MultiHeadAttention(nn.Module):
 
         self.dropout = nn.Dropout(P_DROP)
 
-        self.linear_Qs = [nn.Linear(d_model, self.d)] * num_heads
-        self.linear_Ks = [nn.Linear(d_model, self.d)] * num_heads
-        self.linear_Vs = [nn.Linear(d_model, self.d)] * num_heads
+        self.linear_Qs = [nn.Linear(d_model, self.d).to(device)] * num_heads
+        self.linear_Ks = [nn.Linear(d_model, self.d).to(device)] * num_heads
+        self.linear_Vs = [nn.Linear(d_model, self.d).to(device)] * num_heads
 
-        self.mha_linear = nn.Linear(d_model, d_model)
+        self.mha_linear = nn.Linear(d_model, d_model).to(device)
 
     def scaled_dot_product_attention(self, Q: Tensor, K: Tensor, V: Tensor, mask=None):
         Q_K_matmul = torch.matmul(Q, K.transpose(-2, -1))
@@ -174,37 +176,37 @@ class MultiHeadAttention(nn.Module):
 
 
 # %%
-toy_MHA_layer = MultiHeadAttention(d_model=4, num_heads=2)
-toy_MHA, attention_weights = toy_MHA_layer(toy_PEs)
-print(toy_MHA, toy_MHA.shape)
+# toy_MHA_layer = MultiHeadAttention(d_model=4, num_heads=2)
+# toy_MHA, attention_weights = toy_MHA_layer(toy_PEs)
+# print(toy_MHA, toy_MHA.shape)
 
 
 # %%
-temp_MHA_layer = MultiHeadAttention(d_model=3, num_heads=1)
+# temp_MHA_layer = MultiHeadAttention(d_model=3, num_heads=1)
 
 
-def print_out(q, k, v):
-    temp_out, temp_attn = temp_MHA_layer.scaled_dot_product_attention(
-        q, k, v, None)
-    print('Attention weights are:')
-    print(temp_attn)
-    print('Output is:')
-    print(temp_out)
+# def print_out(q, k, v):
+#     temp_out, temp_attn = temp_MHA_layer.scaled_dot_product_attention(
+#         q, k, v, None)
+#     print('Attention weights are:')
+#     print(temp_attn)
+#     print('Output is:')
+#     print(temp_out)
 
 
-temp_k = torch.Tensor([[10, 0, 0],
-                       [0, 10, 0],
-                       [0, 0, 10],
-                       [0, 0, 10]])
+# temp_k = torch.Tensor([[10, 0, 0],
+#                        [0, 10, 0],
+#                        [0, 0, 10],
+#                        [0, 0, 10]])
 
-temp_v = torch.Tensor([[1, 0],
-                       [10, 0],
-                       [100, 5],
-                       [1000, 6]])
+# temp_v = torch.Tensor([[1, 0],
+#                        [10, 0],
+#                        [100, 5],
+#                        [1000, 6]])
 
-temp_q = torch.Tensor([[0, 0, 10], [0, 10, 0], [10, 10, 0]])
+# temp_q = torch.Tensor([[0, 0, 10], [0, 10, 0], [10, 10, 0]])
 
-print_out(temp_q, temp_k, temp_v)
+# print_out(temp_q, temp_k, temp_v)
 
 # temp_y = torch.rand((1, 60, 512))
 
@@ -224,9 +226,9 @@ class AddNorm(nn.Module):
 
 
 # %%
-toy_AddNorm_layer = AddNorm(d_model=4)
-toy_AddNorm = toy_AddNorm_layer(toy_MHA, toy_PEs)
-print(toy_AddNorm, toy_AddNorm.shape)
+# toy_AddNorm_layer = AddNorm(d_model=4)
+# toy_AddNorm = toy_AddNorm_layer(toy_MHA, toy_PEs)
+# print(toy_AddNorm, toy_AddNorm.shape)
 
 # %%
 
@@ -246,14 +248,14 @@ class PointwiseFeedforward(nn.Module):
 
 
 # %%
-toy_PFFN_layer = PointwiseFeedforward(d_model=4, d_ff=16)
-toy_PFFN = toy_PFFN_layer(toy_AddNorm)
-print(toy_PFFN, toy_PFFN.shape)
+# toy_PFFN_layer = PointwiseFeedforward(d_model=4, d_ff=16)
+# toy_PFFN = toy_PFFN_layer(toy_AddNorm)
+# print(toy_PFFN, toy_PFFN.shape)
 
 # %%
-toy_AddNorm_layer_2 = AddNorm(d_model=4)
-toy_AddNorm_2 = toy_AddNorm_layer_2(toy_PFFN, toy_AddNorm)
-print(toy_AddNorm_2, toy_AddNorm_2.shape)
+# toy_AddNorm_layer_2 = AddNorm(d_model=4)
+# toy_AddNorm_2 = toy_AddNorm_layer_2(toy_PFFN, toy_AddNorm)
+# print(toy_AddNorm_2, toy_AddNorm_2.shape)
 # %%
 
 
@@ -309,9 +311,9 @@ class Encoder(nn.Module):
 
 
 # %%
-toy_encoder = Encoder(3, 4, 4, 2, 16, 0.1, toy_embedding_layer)
-toy_encoder_output = toy_encoder(toy_vocab)
-print(toy_encoder_output, toy_encoder_output.shape)
+# toy_encoder = Encoder(3, 4, 4, 2, 16, 0.1, toy_embedding_layer)
+# toy_encoder_output = toy_encoder(toy_vocab)
+# print(toy_encoder_output, toy_encoder_output.shape)
 
 
 # %%
@@ -330,8 +332,8 @@ class DecoderLayer(nn.Module):
         # They store the attention weights per layer
         # So if we had N decoder layers in our Decoder,
         # the final DecoderLayer will hold N attention weight tensors
-        self.masked_mha_attn_weights = []
-        self.enc_dec_mha_attn_weights = []
+        self.masked_mha_attn_weights = None
+        self.enc_dec_mha_attn_weights = None
 
     def forward(self, inputs):
         x, encoder_output, mask, masked_mha_attn_weights, enc_dec_mha_attn_weights = inputs
@@ -348,8 +350,8 @@ class DecoderLayer(nn.Module):
             self.d_model, self.d_ff, self.p_drop)(addNorm_2)
         addNorm_3 = AddNorm(self.d_model, self.p_drop)(pffn, addNorm_2)
 
-        self.masked_mha_attn_weights.append(masked_mha_attn_weights)
-        self.enc_dec_mha_attn_weights.append(enc_dec_mha_attn_weights)
+        self.masked_mha_attn_weights = masked_mha_attn_weights
+        self.enc_dec_mha_attn_weights = enc_dec_mha_attn_weights
 
         return (addNorm_3, encoder_output, mask, self.masked_mha_attn_weights, self.enc_dec_mha_attn_weights)
 
@@ -393,12 +395,12 @@ class Decoder(nn.Module):
 
 
 # %%
-toy_decoder = Decoder(3, 4, 4, 2, 16, 0.1, toy_embedding_layer)
-toy_decoder_output, _, _, toy_mmha_w, toy_e_d_mha_w = toy_decoder(
-    toy_vocab, toy_encoder_output)
-print(toy_decoder_output, toy_decoder_output.shape)
-print(toy_mmha_w, len(toy_mmha_w))
-print(toy_e_d_mha_w, len(toy_e_d_mha_w))
+# toy_decoder = Decoder(3, 4, 4, 2, 16, 0.1, toy_embedding_layer)
+# toy_decoder_output, _, _, toy_mmha_w, toy_e_d_mha_w = toy_decoder(
+#     toy_vocab, toy_encoder_output)
+# print(toy_decoder_output, toy_decoder_output.shape)
+# print(toy_mmha_w, len(toy_mmha_w))
+# print(toy_e_d_mha_w, len(toy_e_d_mha_w))
 
 # %%
 
@@ -407,14 +409,15 @@ class Transformer(nn.Module):
     def __init__(self, num_layers, src_vocab_len, trg_vocab_len, d_model, num_heads, d_ff, p_drop):
         super().__init__()
 
-        len_vocab = src_vocab_len + trg_vocab_len
+        # len_vocab = src_vocab_len + trg_vocab_len
 
-        Embedding = Embeddings(len_vocab, d_model)
+        encoder_Embedding = Embeddings(src_vocab_len, d_model)
+        decoder_Embedding = Embeddings(trg_vocab_len, d_model)
 
         self.encoder = Encoder(num_layers, src_vocab_len,
-                               d_model, num_heads, d_ff, p_drop, Embedding)
+                               d_model, num_heads, d_ff, p_drop, encoder_Embedding)
         self.decoder = Decoder(num_layers, trg_vocab_len,
-                               d_model, num_heads, d_ff, p_drop, Embedding)
+                               d_model, num_heads, d_ff, p_drop, decoder_Embedding)
 
         # Maybe use target vocab size here
         self.linear_layer = nn.Linear(d_model, trg_vocab_len)
@@ -428,14 +431,14 @@ class Transformer(nn.Module):
 
 
 # %%
-toy_transformer_layer = Transformer(
-    2, 8000, 8500, 512, 8, 2048, 0.1
-)
+# toy_transformer_layer = Transformer(
+#     2, 8000, 8500, 512, 8, 2048, 0.1
+# )
 
-toy_input = torch.rand((64, 38)).long()
-toy_target = torch.rand((64, 36)).long()
-toy_output, _, _ = toy_transformer_layer(toy_input, toy_target)
-print(toy_output.shape, toy_output)
+# toy_input = torch.rand((64, 38)).long()
+# toy_target = torch.rand((64, 36)).long()
+# toy_output, _, _ = toy_transformer_layer(toy_input, toy_target)
+# print(toy_output.shape, toy_output)
 
 
 # %%
@@ -459,7 +462,7 @@ def init_weights(model: nn.Module):
 PAD_IDX = TRG.vocab.stoi["<pad>"]
 src_vocab_len = SRC.vocab.__len__()
 trg_vocab_len = TRG.vocab.__len__()
-transformer = Transformer(2, src_vocab_len, trg_vocab_len, D_MODEL, NUM_HEADS, D_FF, P_DROP)
+transformer = Transformer(2, src_vocab_len, trg_vocab_len, D_MODEL, NUM_HEADS, D_FF, P_DROP).to(device)
 
 # %%
 criterion = nn.CrossEntropyLoss(reduction="none", ignore_index=PAD_IDX)
@@ -493,7 +496,6 @@ for step in tqdm(range(STEPS)):
     optimizer.step()
 
     loss_list.append(loss)
-    print()
 
     if step % 50 == 0:
         print("Loss at {}th step: {}".format(step, loss.mean().item()))
