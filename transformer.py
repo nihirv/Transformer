@@ -60,10 +60,10 @@ class Embeddings(nn.Module):
         return self.embedding(x) * math.sqrt(self.d_model)
 
 
-# %%
-toy_embedding_layer = Embeddings(toy_vocab.shape[-1]+1, d_model=4)
-toy_embeddings = toy_embedding_layer(toy_vocab)
-print(toy_embeddings, toy_embeddings.shape)
+# # %%
+# toy_embedding_layer = Embeddings(toy_vocab.shape[-1]+1, d_model=4)
+# toy_embeddings = toy_embedding_layer(toy_vocab)
+# print(toy_embeddings, toy_embeddings.shape)
 
 # %%
 
