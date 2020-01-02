@@ -41,7 +41,7 @@ train_iter, val_iter, test_iter = BucketIterator.splits(
 
 # %%
 x_ = next(iter(train_iter))
-toy_vocab = torch.Tensor([[1, 2, 3]]).long()  # [a,b,c]
+toy_vocab = torch.Tensor([[1, 2, 3]]).long().to(device) # [a,b,c]
 # %%
 D_MODEL = 512
 P_DROP = 0.1
@@ -60,10 +60,10 @@ class Embeddings(nn.Module):
         return self.embedding(x) * math.sqrt(self.d_model)
 
 
-# # %%
-# toy_embedding_layer = Embeddings(toy_vocab.shape[-1]+1, d_model=4)
-# toy_embeddings = toy_embedding_layer(toy_vocab)
-# print(toy_embeddings, toy_embeddings.shape)
+# %%
+toy_embedding_layer = Embeddings(toy_vocab.shape[-1]+1, d_model=4)
+toy_embeddings = toy_embedding_layer(toy_vocab)
+print(toy_embeddings, toy_embeddings.shape)
 
 # %%
 
@@ -96,9 +96,9 @@ class PositionalEncoding(nn.Module):
 
 
 # %%
-# toy_PE_layer = PositionalEncoding(d_model=4)
-# toy_PEs = toy_PE_layer(toy_embeddings)
-# print(toy_PEs)
+toy_PE_layer = PositionalEncoding(d_model=4)
+toy_PEs = toy_PE_layer(toy_embeddings)
+print(toy_PEs)
 
 # %%
 
@@ -176,9 +176,9 @@ class MultiHeadAttention(nn.Module):
 
 
 # %%
-# toy_MHA_layer = MultiHeadAttention(d_model=4, num_heads=2)
-# toy_MHA, attention_weights = toy_MHA_layer(toy_PEs)
-# print(toy_MHA, toy_MHA.shape)
+toy_MHA_layer = MultiHeadAttention(d_model=4, num_heads=2)
+toy_MHA, attention_weights = toy_MHA_layer(toy_PEs)
+print(toy_MHA, toy_MHA.shape)
 
 
 # %%
@@ -226,9 +226,9 @@ class AddNorm(nn.Module):
 
 
 # %%
-# toy_AddNorm_layer = AddNorm(d_model=4)
-# toy_AddNorm = toy_AddNorm_layer(toy_MHA, toy_PEs)
-# print(toy_AddNorm, toy_AddNorm.shape)
+toy_AddNorm_layer = AddNorm(d_model=4)
+toy_AddNorm = toy_AddNorm_layer(toy_MHA, toy_PEs)
+print(toy_AddNorm, toy_AddNorm.shape)
 
 # %%
 
@@ -247,15 +247,15 @@ class PointwiseFeedforward(nn.Module):
         return self.pffn(x)
 
 
-# %%
-# toy_PFFN_layer = PointwiseFeedforward(d_model=4, d_ff=16)
-# toy_PFFN = toy_PFFN_layer(toy_AddNorm)
-# print(toy_PFFN, toy_PFFN.shape)
+%%
+toy_PFFN_layer = PointwiseFeedforward(d_model=4, d_ff=16)
+toy_PFFN = toy_PFFN_layer(toy_AddNorm)
+print(toy_PFFN, toy_PFFN.shape)
 
 # %%
-# toy_AddNorm_layer_2 = AddNorm(d_model=4)
-# toy_AddNorm_2 = toy_AddNorm_layer_2(toy_PFFN, toy_AddNorm)
-# print(toy_AddNorm_2, toy_AddNorm_2.shape)
+toy_AddNorm_layer_2 = AddNorm(d_model=4)
+toy_AddNorm_2 = toy_AddNorm_layer_2(toy_PFFN, toy_AddNorm)
+print(toy_AddNorm_2, toy_AddNorm_2.shape)
 # %%
 
 
@@ -311,9 +311,9 @@ class Encoder(nn.Module):
 
 
 # %%
-# toy_encoder = Encoder(3, 4, 4, 2, 16, 0.1, toy_embedding_layer)
-# toy_encoder_output = toy_encoder(toy_vocab)
-# print(toy_encoder_output, toy_encoder_output.shape)
+toy_encoder = Encoder(3, 4, 4, 2, 16, 0.1, toy_embedding_layer)
+toy_encoder_output = toy_encoder(toy_vocab)
+print(toy_encoder_output, toy_encoder_output.shape)
 
 
 # %%
@@ -395,12 +395,12 @@ class Decoder(nn.Module):
 
 
 # %%
-# toy_decoder = Decoder(3, 4, 4, 2, 16, 0.1, toy_embedding_layer)
-# toy_decoder_output, _, _, toy_mmha_w, toy_e_d_mha_w = toy_decoder(
-#     toy_vocab, toy_encoder_output)
-# print(toy_decoder_output, toy_decoder_output.shape)
-# print(toy_mmha_w, len(toy_mmha_w))
-# print(toy_e_d_mha_w, len(toy_e_d_mha_w))
+toy_decoder = Decoder(3, 4, 4, 2, 16, 0.1, toy_embedding_layer)
+toy_decoder_output, _, _, toy_mmha_w, toy_e_d_mha_w = toy_decoder(
+    toy_vocab, toy_encoder_output)
+print(toy_decoder_output, toy_decoder_output.shape)
+print(toy_mmha_w, len(toy_mmha_w))
+print(toy_e_d_mha_w, len(toy_e_d_mha_w))
 
 # %%
 
@@ -431,14 +431,14 @@ class Transformer(nn.Module):
 
 
 # %%
-# toy_transformer_layer = Transformer(
-#     2, 8000, 8500, 512, 8, 2048, 0.1
-# )
+toy_transformer_layer = Transformer(
+    2, 8000, 8500, 512, 8, 2048, 0.1
+)
 
-# toy_input = torch.rand((64, 38)).long()
-# toy_target = torch.rand((64, 36)).long()
-# toy_output, _, _ = toy_transformer_layer(toy_input, toy_target)
-# print(toy_output.shape, toy_output)
+toy_input = torch.rand((64, 38)).long().to(device)
+toy_target = torch.rand((64, 36)).long().to(device)
+toy_output, _, _ = toy_transformer_layer(toy_input, toy_target)
+print(toy_output.shape, toy_output)
 
 
 # %%
