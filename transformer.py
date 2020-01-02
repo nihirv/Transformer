@@ -115,9 +115,9 @@ class MultiHeadAttention(nn.Module):
 
         self.dropout = nn.Dropout(P_DROP)
 
-        self.linear_Qs = [nn.Linear(d_model, self.d).to(device)] * num_heads
-        self.linear_Ks = [nn.Linear(d_model, self.d).to(device)] * num_heads
-        self.linear_Vs = [nn.Linear(d_model, self.d).to(device)] * num_heads
+        self.linear_Qs = [nn.Linear(d_model, self.d).to(device) for head in range(num_heads)]
+        self.linear_Ks = [nn.Linear(d_model, self.d).to(device) for head in range(num_heads)]
+        self.linear_Vs = [nn.Linear(d_model, self.d).to(device) for head in range(num_heads)]
 
         self.mha_linear = nn.Linear(d_model, d_model).to(device)
 
@@ -374,7 +374,7 @@ class Decoder(nn.Module):
             self.num_heads,
             self.d_ff,
             self.p_drop
-        )] * num_layers)
+        ) for layer in range(num_layers)])
 
         self.decodersModelStack = nn.Sequential(*self.decoders)
 
