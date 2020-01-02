@@ -247,7 +247,7 @@ class PointwiseFeedforward(nn.Module):
         return self.pffn(x)
 
 
-%%
+# %%
 toy_PFFN_layer = PointwiseFeedforward(d_model=4, d_ff=16)
 toy_PFFN = toy_PFFN_layer(toy_AddNorm)
 print(toy_PFFN, toy_PFFN.shape)
