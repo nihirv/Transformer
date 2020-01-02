@@ -33,7 +33,7 @@ BATCH_SIZE = 64
 train_iter, val_iter, test_iter = BucketIterator.splits(
     (train_data, val_data, test_data),
     batch_size=BATCH_SIZE,
-    # device=device,
+    device=device,
     repeat=True,
     shuffle=True
 )
@@ -488,6 +488,10 @@ for step in tqdm(range(STEPS)):
 
     num_targ_tokens_in_batch = (t_trg_real != PAD_IDX).data.sum()
     
+    print("SRC", t_src)
+    print("TRG", t_trg_inp)
+
+
     predictions, _, _ = transformer(t_src, t_trg_inp)
 
     loss = criterion(predictions.permute(0, 2, 1), t_trg_real)
