@@ -33,7 +33,7 @@ BATCH_SIZE = 64
 train_iter, val_iter, test_iter = BucketIterator.splits(
     (train_data, val_data, test_data),
     batch_size=BATCH_SIZE,
-    device=device,
+    # device=device,
     repeat=True,
     shuffle=True
 )
